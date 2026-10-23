@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#172033">
+<meta name="description" content="Roue de la fortune personnalisable, gratuite et utilisable hors ligne.">
+<link rel="manifest" href="manifest.json">
+<title>Ma roue</title>
+<style>
+:root{--bg:#101827;--panel:#1b2638;--text:#f7f8fb;--muted:#b7c2d2;--accent:#7dd3fc}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(145deg,#101827,#202b43);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+main{max-width:1000px;margin:auto;padding:16px;padding-bottom:34px}
+h1{font-size:clamp(1.5rem,4vw,2.2rem);margin:6px 0 4px}
+.sub{color:var(--muted);margin:0 0 16px}
+.layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:16px;align-items:start}
+.panel{background:rgba(27,38,56,.96);border:1px solid #34435a;border-radius:18px;padding:16px;box-shadow:0 8px 30px #0002}
+.wheelwrap{position:relative;width:min(100%,620px);margin:0 auto}
+canvas{display:block;width:100%;height:auto;touch-action:manipulation}
+.pointer{position:absolute;top:-2px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:17px solid transparent;border-right:17px solid transparent;border-top:32px solid #fff;filter:drop-shadow(0 2px 2px #0008);z-index:2}
+button,select,input,textarea{font:inherit}
+button{border:0;border-radius:12px;padding:12px 14px;background:#38bdf8;color:#082032;font-weight:750;cursor:pointer}
+button.secondary{background:#334155;color:#fff;border:1px solid #526176}
+button.danger{background:#7f1d1d;color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+.result{font-size:1.25rem;font-weight:800;text-align:center;min-height:1.7em;margin-top:12px;color:#fde68a;overflow-wrap:anywhere}
+label{display:block;font-weight:700;margin:12px 0 6px}
+input,select,textarea{width:100%;border-radius:10px;border:1px solid #526176;background:#101827;color:#fff;padding:10px}
+textarea{min-height:190px;resize:vertical;line-height:1.45}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{min-width:0}
+.row button{white-space:nowrap}
+.small{font-size:.9rem;color:var(--muted)}
+.list{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.entry{display:grid;grid-template-columns:30px 1fr 42px;gap:8px;align-items:center}
+.entry input[type=color]{padding:3px;height:42px}
+.entry button{padding:8px;background:#334155;color:white}
+hr{border:0;border-top:1px solid #34435a;margin:16px 0}
+.status{color:#a7f3d0;font-size:.9rem;min-height:1.2em}
+@media(max-width:760px){.layout{grid-template-columns:1fr}main{padding:10px}.panel{padding:12px}.wheelwrap{width:min(100%,560px)}}
+</style>
+</head>
+<body>
+<main>
+  <h1>🎡 Ma roue de la fortune</h1>
+  <p class="sub">Crée tes roues, personnalise les tranches et lance le tirage.</p>
+  <div class="layout">
+    <section class="panel">
+      <div class="row" style="margin-bottom:12px">
+        <select id="wheelSelect" aria-label="Choisir une roue"></select>
+        <button id="newWheel" class="secondary">+ Nouvelle</button>
+      </div>
+      <div class="wheelwrap"><div class="pointer"></div><canvas id="wheel" width="900" height="900" aria-label="Roue de tirage"></canvas></div>
+      <div class="actions">
+        <button id="spin">▶ Faire tourner</button>
+        <button id="resetSpin" class="secondary">Réinitialiser</button>
+      </div>
+      <div id="result" class="result" aria-live="polite">À toi de jouer !</div>
+      <div class="small" style="text-align:center">Le tirage est aléatoire. Chaque tranche a la même chance si les tranches ont la même taille.</div>
+    </section>
+    <section class="panel">
+      <label for="wheelName">Nom de cette roue</label>
+      <div class="row"><input id="wheelName" maxlength="60" placeholder="Ex. Idées de repas"><button id="rename" class="secondary">Renommer</button></div>
+      <label for="entries">Entrées (une par ligne)</label>
+      <textarea id="entries" spellcheck="false" placeholder="Choix 1&#10;Choix 2&#10;Choix 3"></textarea>
+      <p class="small">Une ligne = une tranche. Les couleurs sont attribuées automatiquement. Les lignes vides sont ignorées.</p>
+      <div class="actions" style="justify-content:flex-start">
+        <button id="apply">Mettre à jour la roue</button>
+        <button id="removeWinner" class="secondary">Retirer le résultat</button>
+      </div>
+      <hr>
+      <label for="wheelColor">Couleur de départ pour les nouvelles tranches</label>
+      <input type="color" id="wheelColor" value="#38bdf8" style="height:46px">
+      <div class="actions" style="justify-content:flex-start">
+        <button id="export" class="secondary">Exporter mes roues</button>
+        <button id="importBtn" class="secondary">Importer</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <div id="status" class="status" role="status"></div>
+      <hr>
+      <button id="deleteWheel" class="danger">Supprimer cette roue</button>
+      <p class="small">Les roues sont enregistrées dans le stockage local de ce navigateur. Exporte régulièrement une copie de secours, surtout avant d'effacer les données de navigation ou de changer de navigateur.</p>
+    </section>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const palette=['#f87171','#fb923c','#fbbf24','#a3e635','#34d399','#2dd4bf','#38bdf8','#60a5fa','#818cf8','#a78bfa','#e879f9','#f472b6'];
+const STORE='maRoueFortune_v1';
+let wheels=[], currentId=null, rotation=0, spinning=false, lastWinner=null;
+const canvas=$('wheel'),ctx=canvas.getContext('2d');
+function uid(){return 'w'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function defaultWheel(){return {id:uid(),name:'Ma première roue',items:['Choix 1','Choix 2','Choix 3','Choix 4','Choix 5','Choix 6'].map((text,i)=>({text,color:palette[i%palette.length]}))}}
+function current(){return wheels.find(w=>w.id===currentId)||wheels[0]}
+function save(){try{localStorage.setItem(STORE,JSON.stringify(wheels));$('status').textContent='Sauvegarde effectuée sur cette tablette.'}catch(e){$('status').textContent='Sauvegarde impossible dans le navigateur. Exporte tes roues.'}}
+function load(){try{const v=JSON.parse(localStorage.getItem(STORE)||'null');if(Array.isArray(v)&&v.length) wheels=v}catch(e){}if(!wheels.length)wheels=[defaultWheel()];currentId=wheels[0].id;renderAll(false)}
+function renderSelect(){const sel=$('wheelSelect');sel.innerHTML='';wheels.forEach(w=>{const o=document.createElement('option');o.value=w.id;o.textContent=w.name||'Roue sans nom';sel.append(o)});sel.value=currentId}
+function renderEditor(){const w=current();if(!w)return;$('wheelName').value=w.name;$('entries').value=w.items.map(x=>x.text).join('\n')}
+function renderAll(doSave=true){renderSelect();renderEditor();draw();if(doSave)save()}
+function hexToRgb(hex){return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)]}
+function luminance(hex){const [r,g,b]=hexToRgb(hex).map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*r+.7152*g+.0722*b}
+function draw(){
+ const w=current(),items=w?.items||[],W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,r= W*.46;
+ ctx.clearRect(0,0,W,H);
+ if(!items.length){ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 34px system-ui';ctx.fillText('Ajoute des entrées',cx,cy);return}
+ const step=Math.PI*2/items.length;
+ items.forEach((it,i)=>{
+   const start=rotation+i*step-Math.PI/2, end=start+step;
+   ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();ctx.fillStyle=it.color||palette[i%palette.length];ctx.fill();
+   ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();
+   ctx.save();ctx.translate(cx,cy);ctx.rotate(start+step/2);
+   const maxFont=Math.max(15,Math.min(31,Math.floor(700/items.length)));
+   ctx.font=`700 ${maxFont}px system-ui`;ctx.textAlign='right';ctx.textBaseline='middle';
+   ctx.fillStyle=luminance(it.color||palette[i%palette.length])>.48?'#172033':'#ffffff';
+   let label=it.text;const maxLen=Math.max(8,Math.floor(24*maxFont/22));if(label.length>maxLen)label=label.slice(0,maxLen-1)+'…';
+   ctx.fillText(label,r*.86,0);ctx.restore();
+ });
+ ctx.beginPath();ctx.arc(cx,cy,36,0,Math.PI*2);ctx.fillStyle='#f8fafc';ctx.fill();ctx.strokeStyle='#0f172a';ctx.lineWidth=5;ctx.stroke();
+ ctx.beginPath();ctx.arc(cx,cy,10,0,Math.PI*2);ctx.fillStyle='#0f172a';ctx.fill();
+}
+function applyEntries(){
+ if(spinning)return;const w=current();const lines=$('entries').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+ const old=new Map(w.items.map(x=>[x.text,x.color]));const start=$('wheelColor').value;
+ w.items=lines.map((text,i)=>({text,color:old.get(text)|| (i===0?start:palette[i%palette.length])}));
+ lastWinner=null;$('result').textContent='';renderAll();
+}
+function spin(){
+ const w=current();if(spinning||!w.items.length)return;
+ if(w.items.length===1){$('result').textContent='Résultat : '+w.items[0].text;lastWinner=0;return}
+ spinning=true;$('spin').disabled=true;$('result').textContent='';const start=rotation;
+ const turns=5+Math.random()*5;const target=start+turns*Math.PI*2+Math.random()*Math.PI*2;const duration=4200+Math.random()*900;const t0=performance.now();
+ function frame(now){let p=Math.min(1,(now-t0)/duration);let eased=1-Math.pow(1-p,4);rotation=start+(target-start)*eased;draw();if(p<1)requestAnimationFrame(frame);else{
+   spinning=false;$('spin').disabled=false;
+   const angle=((Math.PI*1.5-rotation)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+   const idx=Math.floor(angle/(Math.PI*2/w.items.length))%w.items.length;
+   lastWinner=idx;$('result').textContent='Résultat : '+w.items[idx].text;
+ }}
+ requestAnimationFrame(frame)
+}
+$('wheelSelect').addEventListener('change',e=>{currentId=e.target.value;lastWinner=null;$('result').textContent='';renderAll(false)});
+$('newWheel').addEventListener('click',()=>{const w=defaultWheel();w.name='Nouvelle roue';wheels.push(w);currentId=w.id;lastWinner=null;renderAll()});
+$('rename').addEventListener('click',()=>{const w=current();w.name=$('wheelName').value.trim()||'Roue sans nom';renderAll()});
+$('apply').addEventListener('click',applyEntries);
+$('spin').addEventListener('click',spin);
+$('resetSpin').addEventListener('click',()=>{if(spinning)return;rotation=0;lastWinner=null;$('result').textContent='À toi de jouer !';draw()});
+$('removeWinner').addEventListener('click',()=>{if(spinning||lastWinner===null)return;const w=current();w.items.splice(lastWinner,1);lastWinner=null;$('result').textContent='';$('entries').value=w.items.map(x=>x.text).join('\n');renderAll()});
+$('deleteWheel').addEventListener('click',()=>{if(spinning)return;if(wheels.length===1){alert('Il faut conserver au moins une roue. Tu peux la vider ou la renommer.');return}if(!confirm('Supprimer cette roue ?'))return;wheels=wheels.filter(w=>w.id!==currentId);currentId=wheels[0].id;lastWinner=null;renderAll()});
+$('export').addEventListener('click',()=>{const blob=new Blob([JSON.stringify({format:'ma-roue-v1',wheels},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mes-roues.json';a.click();URL.revokeObjectURL(a.href);$('status').textContent='Fichier d’export créé.'});
+$('importBtn').addEventListener('click',()=>$('importFile').click());
+$('importFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const obj=JSON.parse(await file.text());const incoming=Array.isArray(obj)?obj:obj.wheels;if(!Array.isArray(incoming)||!incoming.length)throw new Error('format');const cleaned=incoming.filter(w=>w&&Array.isArray(w.items)).map(w=>({id:uid(),name:String(w.name||'Roue importée'),items:w.items.filter(i=>i&&typeof i.text==='string').map((i,n)=>({text:i.text,color:/^#[0-9a-f]{6}$/i.test(i.color)?i.color:palette[n%palette.length]}))}));if(!cleaned.length)throw new Error('empty');wheels=cleaned;currentId=wheels[0].id;renderAll();$('status').textContent='Importation réussie.'}catch(err){alert('Ce fichier ne semble pas être un export valide de Ma roue.')}e.target.value=''});
+load();
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}))}
+</script>
+</body>
+</html>
